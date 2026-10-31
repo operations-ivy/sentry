@@ -213,7 +213,7 @@ def test_http_and_metrics(router):
     try:
         code, body = get_json(base + "/api/state")
         assert code == 200 and body["unexpected"] == 1 and body["scanning"]
-        text = render(upnp_registry(w, hub, __import__("overwatch.metrics", fromlist=["Requests"]).Requests())).decode()
+        text = render(upnp_registry(w, hub)).decode()
         assert "overwatch_upnp_mappings 2.0" in text
         assert "overwatch_upnp_unexpected 1.0" in text
         assert "overwatch_upnp_reachable 1.0" in text

@@ -37,6 +37,20 @@ spec:
         - name: http
           containerPort: 8080
         env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317"
         - name: LOG_FORMAT
           value: json
         # The first 10 minutes after each start learn the house's usual counts.

@@ -46,8 +46,8 @@ class ScannerMetricsTests(unittest.TestCase):
         get(self.base + "/health")
         get(self.base + "/nope")
         text = metrics(self.base)
-        self.assertIn('overwatch_http_requests_total{code="200",path="/health"} 1.0', text)
-        self.assertIn('overwatch_http_requests_total{code="404",path="other"} 1.0', text)
+        self.assertIn('http_server_requests_total{code="200",method="GET",route="/health"} 1.0', text)
+        self.assertIn('http_server_requests_total{code="404",method="GET",route="other"} 1.0', text)
 
 
 class WifiMetricsTests(unittest.TestCase):

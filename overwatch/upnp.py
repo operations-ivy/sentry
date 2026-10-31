@@ -35,6 +35,8 @@ from dataclasses import dataclass
 
 import brick_observe
 
+from . import tracing
+
 log = brick_observe.get_logger(__name__)
 
 SSDP = ("239.255.255.250", 1900)
@@ -250,24 +252,26 @@ class UpnpWatch:
                     if not allowed(m, self.allow):
                         fresh.append(m)
                         when = "found open" if not self.polled else "opened"
-                        self.alerts.append(
-                            {
-                                "kind": "upnp",
-                                "label": "UPnP port forward",
-                                "confidence": "high",
-                                "at": now,
-                                "detail": f"{when}: internet {m.protocol} {m.external_port} → "
-                                f"{m.client}:{m.internal_port}" + (f" “{m.description}”" if m.description else ""),
-                            }
-                        )
                         self.alert_counts["unexpected"] += 1
-                        log.info(
-                            "overwatch upnp alert",
-                            mapping=m.key,
-                            description=m.description,
-                            client=m.client,
-                            internal_port=m.internal_port,
-                        )
+                        with brick_observe.span("overwatch alert", **{"overwatch.kind": "upnp"}):
+                            self.alerts.append(
+                                {
+                                    "kind": "upnp",
+                                    "label": "UPnP port forward",
+                                    "confidence": "high",
+                                    "at": now,
+                                    "detail": f"{when}: internet {m.protocol} {m.external_port} → "
+                                    f"{m.client}:{m.internal_port}" + (f" “{m.description}”" if m.description else ""),
+                                    **tracing.carried(),
+                                }
+                            )
+                            log.info(
+                                "overwatch upnp alert",
+                                mapping=m.key,
+                                description=m.description,
+                                client=m.client,
+                                internal_port=m.internal_port,
+                            )
             for key in set(self.mappings) - set(current):
                 self.first.pop(key, None)
             self.mappings = current
@@ -312,7 +316,8 @@ def poll_forever(watch: UpnpWatch, hub, gateway: Gateway, interval: float = 60) 
 
     while True:
         try:
-            watch.update(gateway.mappings())
+            with brick_observe.span("upnp poll"):
+                watch.update(gateway.mappings())
         except Exception as e:  # router rebooting, UPnP turned off, network blip
             if watch.scanning or not watch.error:
                 log.warning("upnp poll failed", error=str(e))

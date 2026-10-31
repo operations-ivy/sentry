@@ -43,6 +43,8 @@ from dataclasses import dataclass
 
 import brick_observe
 
+from . import tracing
+
 log = brick_observe.get_logger(__name__)
 
 BROADCAST = "ff:ff:ff:ff:ff:ff"
@@ -342,17 +344,19 @@ class WifiWatch:
         if t is None or now - t.last > self.gone_seconds:
             t = self.threats[(kind, key)] = Threat(kind, self._number(key), now, now, confidence, target, reason)
             self.alert_counts[kind] += 1
-            self.alerts.append(
-                {
-                    "kind": kind,
-                    "label": KINDS[kind].label,
-                    "confidence": confidence,
-                    "at": now,
-                    "detail": f"{reason} · AP {t.number}" + (f" · against {target}" if kind == "deauth" else ""),
-                    "rssi": extra.get("rssi"),
-                }
-            )
-            log.info("overwatch wifi alert", kind=kind, reason=reason)
+            with brick_observe.span("overwatch alert", **{"overwatch.kind": kind}):
+                self.alerts.append(
+                    {
+                        "kind": kind,
+                        "label": KINDS[kind].label,
+                        "confidence": confidence,
+                        "at": now,
+                        "detail": f"{reason} · AP {t.number}" + (f" · against {target}" if kind == "deauth" else ""),
+                        "rssi": extra.get("rssi"),
+                        **tracing.carried(),
+                    }
+                )
+                log.info("overwatch wifi alert", kind=kind, reason=reason)
         t.last, t.confidence, t.target, t.reason = now, confidence, target, reason
         for k, v in extra.items():
             if v is not None:

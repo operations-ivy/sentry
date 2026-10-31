@@ -2059,8 +2059,8 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (path, code) (rate(overwatch_http_requests_total{path!=\"/metrics\"}[5m]))",
-              "legendFormat": "{{path}} {{code}}"
+              "expr": "sum by (route, code) (rate(http_server_requests_total{namespace=\"overwatch\",route!=\"/metrics\"}[5m]))",
+              "legendFormat": "{{route}} {{code}}"
             }
           ],
           "fieldConfig": {

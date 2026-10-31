@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import brick_observe
 
-from . import metrics
+from . import metrics, tracing
 from .hub import Hub, stream
 from .watch import Watch, classify, describe
 
@@ -86,14 +86,16 @@ def make_server(
     watch, hub: Hub, host: str, port: int, heartbeat: float = 5, registry=metrics.ble_registry
 ) -> ThreadingHTTPServer:
     """The scanner's server; the Wi-Fi watch's too, with its own `registry`."""
-    requests = metrics.Requests()
-    reg = registry(watch, hub, requests)
+    reg = registry(watch, hub)
 
-    class Handler(BaseHTTPRequestHandler):
+    class Handler(brick_observe.httpserver.Observed, BaseHTTPRequestHandler):
+        routes = {"/api/state", "/api/stream"}
+        skip = tracing.NOT_TRACED
+        metrics_registry = reg
+
         def do_GET(self):
             if self.path == "/api/stream":
                 hub.publish(state(watch))  # never an empty first event
-                requests.add(self.path, 200)
                 self._stream()
             elif self.path == "/api/state":
                 body = {"now": time.time(), **state(watch)}
@@ -123,16 +125,12 @@ def make_server(
                 pass  # the listener went away
 
         def _send(self, code: int, body: bytes, ctype: str = "text/plain; charset=utf-8"):
-            requests.add(self.path, code)
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
-
-        def log_message(self, format, *args):
-            log.debug("request", line=format % args)  # debug: probes come every few seconds
 
     return ThreadingHTTPServer((host, port), Handler)
 
