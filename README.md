@@ -43,6 +43,7 @@ frames:
 | Evil twin | a house BSSID offering weaker security (open, WPA2 instead of WPA3, …) | high |
 | Evil twin | a house BSSID on a channel the house doesn't use, while the real one is still heard on a house channel (heard there after the other's first beacon, within 60 s) | medium |
 | Karma / Pineapple | one non-house BSSID answering probes for 4 or more SSIDs in a minute | high |
+| Deauth spray | fresh deauths across 4 or more BSSIDs in a short window (a handshake harvester, e.g. a pwnagotchi) | high |
 
 A house BSSID heard only on a channel outside its list has moved (the router
 restarted, or left a DFS channel for radar): not an alert, but the Wi-Fi
@@ -53,6 +54,12 @@ Each one alerts as soon as it's heard; it stays on the page until it's gone
 quiet for two minutes. The house's networks (name, SSID, BSSIDs, security,
 channels) come from the `overwatch-wifi-home` SealedSecret in
 brick-k8s-secrets, never this repo, and the page shows only their names.
+Our own pwnagotchis are friends, not threats: `OVERWATCH_WIFI_FRIENDS` points to
+a `friends.json` (`{"pwnagotchis": [{"mac", "name", "face"}]}`, in the same
+SealedSecret) and the Wi-Fi panel greets each one it hears — "pwnagotchi
+Pwny is online!" with its face — instead of alarming. A pwnagotchi's
+deauth spray still alerts; the greeting just says a known one is nearby.
+
 Without it there are no twins, only floods and karma. The dongle spends 60%
 of its time on the house's channels and hops the rest of 2.4 and 5 GHz in
 between (the whole band in about 25 s), so a flood on the house is heard at

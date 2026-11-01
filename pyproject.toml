@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "overwatch"
-version = "0.8.6"
+version = "0.8.7"
 description = "Watch Bluetooth LE around the house for trackers and surveillance gadgets"
 authors = ["Patrick White <whitep@alumni.vcu.edu>"]
 packages = [{ include = "overwatch" }]

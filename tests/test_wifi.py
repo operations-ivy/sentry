@@ -104,6 +104,57 @@ class WatchTests(unittest.TestCase):
     def kinds(self, t: float) -> list[tuple[str, str]]:
         return [(x["kind"], x["confidence"]) for x in self.w.get(now=t)["threats"]]
 
+    def test_a_deauth_spray_across_networks_is_a_harvester(self):
+        # Five BSSIDs, three deauths each: none is a flood, together they are a spray.
+        w = WifiWatch(HOME, deauth_frames=10, spray_bssids=4, spray_seconds=12)
+        for i in range(5):
+            bssid = f"02:00:00:00:0{i + 1}:00"
+            for n in range(3):
+                w.heard(parse(deauth(bssid)), -55, 6, now=i * 0.5 + n * 0.05)
+        threats = w.get(now=3)["threats"]
+        kinds = {t["kind"]: t for t in threats}
+        self.assertIn("harvester", kinds)
+        self.assertNotIn("deauth", kinds)  # no single BSSID crossed the flood line
+        h = kinds["harvester"]
+        self.assertEqual((h["confidence"], h["networks"]), ("high", 5))
+        self.assertIn("5 networks", h["reason"])
+
+    def test_a_single_target_flood_is_not_a_spray(self):
+        for i in range(40):
+            self.hear(deauth(HOME_AP), 100 + i * 0.1)
+        kinds = {k for k, _ in self.kinds(104)}
+        self.assertIn("deauth", kinds)
+        self.assertNotIn("harvester", kinds)
+
+    def test_a_few_networks_are_not_a_spray(self):
+        # Three BSSIDs is below the threshold: a couple of clients leaving, not a sweep.
+        w = WifiWatch(HOME, spray_bssids=4, spray_seconds=12)
+        for i in range(3):
+            w.heard(parse(deauth(f"02:00:00:00:0{i + 1}:00")), -55, 6, now=i * 0.3)
+        self.assertEqual(w.get(now=2)["threats"], [])
+
+    def test_deauths_spread_past_the_window_are_not_a_spray(self):
+        w = WifiWatch(HOME, spray_bssids=4, spray_seconds=12)
+        for i in range(6):
+            w.heard(parse(deauth(f"02:00:00:00:0{i + 1}:00")), -55, 6, now=i * 5.0)
+        # Only the last few BSSIDs are ever inside one 12 s window.
+        self.assertEqual([t["kind"] for t in w.get(now=26)["threats"]], [])
+
+    def test_a_known_pwnagotchi_is_greeted_not_alarmed(self):
+        pwn = "02:00:00:00:00:77"
+        w = WifiWatch(HOME, known={pwn: {"name": "Pwny", "face": "(◕‿◕)"}})
+        w.heard(parse(beacon(pwn, "anything")), -40, 1, now=5)
+        st = w.get(now=6)
+        self.assertEqual(st["threats"], [])
+        self.assertEqual(st["friends"], [{"name": "Pwny", "face": "(◕‿◕)", "last": 5}])
+
+    def test_a_pwnagotchi_goes_offline_after_the_window(self):
+        pwn = "02:00:00:00:00:77"
+        w = WifiWatch(HOME, known={pwn: {"name": "Pwny", "face": "(◕‿◕)"}})
+        w.heard(parse(beacon(pwn, "anything")), -40, 1, now=0)
+        self.assertEqual(len(w.get(now=300)["friends"]), 1)
+        self.assertEqual(w.get(now=601)["friends"], [])
+
     def test_the_house_itself_is_no_threat(self):
         for t in range(30):
             self.hear(beacon(HOME_AP, "Castle"), t)

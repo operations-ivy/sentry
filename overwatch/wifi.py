@@ -233,6 +233,17 @@ def load_home(path: str) -> list[Network]:
     ]
 
 
+def load_friends(path: str) -> dict[str, dict]:
+    """Our own pwnagotchis, to greet instead of alarm at. JSON:
+    {"pwnagotchis": [{"mac", "name", "face"}]} -> {mac: {name, face}}."""
+    with open(path) as f:
+        data = json.load(f)
+    return {
+        p["mac"].lower(): {"name": p["name"], "face": p.get("face", "(◕‿◕)")}
+        for p in data.get("pwnagotchis", [])
+    }
+
+
 @dataclass(frozen=True)
 class Kind:
     key: str
@@ -245,6 +256,7 @@ KINDS = {
         Kind("deauth", "Deauth flood"),
         Kind("twin", "Evil twin"),
         Kind("karma", "Karma / Pineapple"),
+        Kind("harvester", "Deauth spray"),
     )
 }
 
@@ -263,6 +275,7 @@ class Threat:
     frames: int = 0
     broadcast: bool = False
     ssids: int = 0
+    networks: int = 0  # harvester: distinct BSSIDs deauthed in the window
 
 
 class WifiWatch:
@@ -276,13 +289,26 @@ class WifiWatch:
         deauth_seconds: float = 5,
         karma_ssids: int = 4,
         karma_seconds: float = 60,
+        # A handshake harvester (pwnagotchi, and the like) sprays deauths across
+        # every network in range to force reconnects. Each BSSID stays well under
+        # the single-target flood, but deauths touching many BSSIDs in a short
+        # window is a pattern a home never makes on its own.
+        spray_bssids: int = 4,
+        spray_seconds: float = 12,
         gone_seconds: float = 120,
         overlap_seconds: float = 60,
         near_dbm: int = -60,
+        known: dict[str, dict] | None = None,
     ):
         self.home = home or []
+        # Our own pwnagotchis: {mac -> {name, face}}, greeted not alarmed at.
+        self.known = known or {}
+        self.friends: dict[str, float] = {}  # a known pwnagotchi's MAC -> last heard
+        self.friend_seconds = 600  # still "online" this long after the last frame
         self.deauth_frames, self.deauth_seconds = deauth_frames, deauth_seconds
         self.karma_ssids, self.karma_seconds = karma_ssids, karma_seconds
+        self.spray_bssids, self.spray_seconds = spray_bssids, spray_seconds
+        self._sprayed: dict[str, float] = {}  # BSSID -> last fresh deauth, for the spray window
         self.gone_seconds = gone_seconds
         # A flood on a BSSID that isn't the house's, heard louder than this,
         # is close by: "near the house", not "a neighbour's".
@@ -366,6 +392,9 @@ class WifiWatch:
         now = time.time() if now is None else now
         with self._lock:
             self.frame_counts[SUBTYPES.get(f.subtype, "other")] += 1
+            for a in (f.transmitter, f.bssid):
+                if a in self.known:
+                    self.friends[a] = now
             if f.subtype in (DEAUTH, DISASSOC):
                 # A retried frame is the AP resending to a client that already
                 # left, not a fresh flood frame: counting it is how a routine
@@ -381,6 +410,15 @@ class WifiWatch:
         """A flood starts at `deauth_frames` in `deauth_seconds` for one BSSID;
         after that every frame for it counts towards the same flood until it
         goes quiet for `gone_seconds`."""
+        self._sprayed[f.bssid] = now
+        for b in [b for b, seen in self._sprayed.items() if now - seen > self.spray_seconds]:
+            del self._sprayed[b]
+        if len(self._sprayed) >= self.spray_bssids:
+            self._threat(
+                "harvester", "spray", now, "high", "many networks",
+                f"deauths for {len(self._sprayed)} networks in {self.spray_seconds:g} s",
+                rssi=rssi, channel=channel, networks=len(self._sprayed),
+            )
         broadcast = f.receiver == BROADCAST
         t = self.threats.get(("deauth", self._key(f.bssid)))
         if t and now - t.last <= self.gone_seconds:
@@ -495,11 +533,18 @@ class WifiWatch:
             for k in [k for k, m in self.moved.items() if now - m[2] > self.gone_seconds]:
                 del self.moved[k]
             self.alerts = [a for a in self.alerts if now - a["at"] < 1800]
+            for k in [k for k, t in self.friends.items() if now - t > self.friend_seconds]:
+                del self.friends[k]
             return {
                 "error": self.error,
                 "channel": self.channel,
                 "home": [n.name for n in self.home],
                 "aps": len(self.aps),
+                "friends": sorted(
+                    ({"name": self.known[m]["name"], "face": self.known[m]["face"], "last": t}
+                     for m, t in self.friends.items()),
+                    key=lambda f: f["name"],
+                ),
                 # A house network heard only on a channel outside its list:
                 # update overwatch-wifi-home's channels.
                 "moved": sorted({(name, ch) for name, ch, _ in self.moved.values()}),
@@ -518,6 +563,7 @@ class WifiWatch:
                         "frames": t.frames,
                         "broadcast": t.broadcast,
                         "ssids": t.ssids,
+                        "networks": t.networks,
                     }
                     for t in sorted(self.threats.values(), key=lambda t: -t.last)
                 ],
@@ -655,11 +701,17 @@ def main(host: str, port: int, iface: str, home_path: str, home_share: float = 0
         log.info("watching house networks", networks=len(home))
     else:
         log.warning("no house networks: deauth and karma only, no twins", path=home_path or "unset")
+    known: dict[str, dict] = {}
+    friends_path = os.environ.get("OVERWATCH_WIFI_FRIENDS", "")
+    if friends_path and os.path.exists(friends_path):
+        known = load_friends(friends_path)
+        log.info("greeting known pwnagotchis", pwnagotchis=len(known))
     watch, hub = (
         WifiWatch(
             home,
             deauth_frames=int(os.environ.get("OVERWATCH_DEAUTH_FRAMES", "30")),
             deauth_seconds=float(os.environ.get("OVERWATCH_DEAUTH_SECONDS", "5")),
+            known=known,
         ),
         Hub(),
     )

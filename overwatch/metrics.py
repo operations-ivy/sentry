@@ -80,12 +80,12 @@ class _Wifi:
         yield GaugeMetricFamily("overwatch_wifi_access_points", "Access points heard lately.", value=state["aps"])
         threats = GaugeMetricFamily("overwatch_wifi_threats", "Threats going on now.", labels=["kind"])
         by_kind = Counter(t["kind"] for t in state["threats"])
-        for kind in sorted(set(by_kind) | {"deauth", "twin", "karma"}):
+        for kind in sorted(set(by_kind) | {"deauth", "twin", "karma", "harvester"}):
             threats.add_metric([kind], by_kind.get(kind, 0))
         yield threats
         yield _counter("overwatch_wifi_frames", "Management frames heard, by subtype.", "subtype", w.frame_counts)
         yield _counter(
-            "overwatch_wifi_alerts", "Alerts raised: deauth floods, evil twins, karma.", "kind", w.alert_counts
+            "overwatch_wifi_alerts", "Alerts raised: deauth floods, sprays, evil twins, karma.", "kind", w.alert_counts
         )
         yield CounterMetricFamily(
             "overwatch_wifi_capture_failures", "Times capturing failed (no dongle, unplugged).", value=w.failures

@@ -63,6 +63,10 @@ spec:
         # Share of the time on the house's channels; the rest hops the band.
         - name: OVERWATCH_WIFI_HOME_SHARE
           value: "0.6"
+        # Our own pwnagotchis, to greet not alarm at: friends.json in the same
+        # overwatch-wifi-home SealedSecret ({"pwnagotchis":[{mac,name,face}]}).
+        - name: OVERWATCH_WIFI_FRIENDS
+          value: /etc/overwatch/friends.json
         securityContext:
           runAsUser: 0
           runAsNonRoot: false
