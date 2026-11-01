@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "overwatch"
-version = "0.8.4"
+version = "0.8.6"
 description = "Watch Bluetooth LE around the house for trackers and surveillance gadgets"
 authors = ["Patrick White <whitep@alumni.vcu.edu>"]
 packages = [{ include = "overwatch" }]
@@ -9,7 +9,7 @@ packages = [{ include = "overwatch" }]
 python = "^3.11"
 bleak = "^1.1.0"
 prometheus-client = "^0.22.0"
-brick-observe = { git = "https://github.com/operations-ivy/brick-observe.git", tag = "v0.1.0" }
+brick-observe = { git = "https://github.com/operations-ivy/brick-observe.git", tag = "v0.1.0", extras = ["tracing"] }
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.2.0"

@@ -28,7 +28,7 @@ from pathlib import Path
 
 import brick_observe
 
-from . import metrics
+from . import metrics, tracing
 from .hub import Hub, events, stream
 
 log = brick_observe.get_logger(__name__)
@@ -46,6 +46,7 @@ class Upstream:
         self.error = ""
         self.ready = False
         self.drops = 0  # times the stream ended or failed
+        self.relayed: set[str] = set()  # alerts already traced
         self.on_change = on_change or (lambda: hub.publish(self.state()))
         self.on_change()
 
@@ -60,6 +61,7 @@ class Upstream:
                     if data is None:
                         continue  # heartbeat
                     self.scanner = json.loads(data)
+                    self.relayed = tracing.relayed(self.name, self.scanner, self.relayed, self.hub.clients)
                     if self.error:
                         log.info("feed back", feed=self.name)
                     self.error, self.ready = "", True
@@ -128,15 +130,17 @@ class Relay:
 
 
 def make_server(upstream, hub: Hub, host: str, port: int, heartbeat: float = 5) -> ThreadingHTTPServer:
-    requests = metrics.Requests()
-    reg = metrics.web_registry(upstream, hub, requests) if isinstance(upstream, Relay) else None
+    reg = metrics.web_registry(upstream, hub) if isinstance(upstream, Relay) else None
 
-    class Handler(BaseHTTPRequestHandler):
+    class Handler(brick_observe.httpserver.Observed, BaseHTTPRequestHandler):
+        routes = {"/", "/index.html", "/api/state", "/api/stream"}
+        skip = tracing.NOT_TRACED
+        metrics_registry = reg
+
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 self._send(200, PAGE, "text/html; charset=utf-8")
             elif self.path == "/api/stream":
-                requests.add(self.path, 200)
                 self._stream()
             elif self.path == "/api/state":
                 body = {"now": time.time(), **json.loads(hub.latest())}
@@ -168,16 +172,12 @@ def make_server(upstream, hub: Hub, host: str, port: int, heartbeat: float = 5) 
                 pass  # the browser went away
 
         def _send(self, code: int, body: bytes, ctype: str = "text/plain; charset=utf-8"):
-            requests.add(self.path, code)
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
-
-        def log_message(self, format, *args):
-            log.debug("request", line=format % args)  # debug: probes come every few seconds
 
     return ThreadingHTTPServer((host, port), Handler)
 

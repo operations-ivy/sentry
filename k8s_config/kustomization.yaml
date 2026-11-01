@@ -24,4 +24,4 @@ resources:
 
 images:
   - name: whitepatrick/overwatch
-    newTag: 0.8.4
+    newTag: 0.8.6

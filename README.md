@@ -255,8 +255,18 @@ address or a BSSID:
 - UPnP watch: `overwatch_upnp_*`: router answering, forwards now,
   unexpected forwards now, forwards opened, alerts and polls by result.
 - web pods: `overwatch_web_upstream_up` and `_reconnects_total` per feed.
-- all three: `overwatch_stream_clients`, `overwatch_state_changes_total`,
-  `overwatch_http_requests_total`.
+- all of them: `overwatch_stream_clients`, `overwatch_state_changes_total`,
+  and brick-observe's `http_server_*`.
+
+## Traces
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` and each pod sends spans to Tempo as
+`overwatch-scan`, `-wifi`, `-upnp` and `-web`: each request except the
+long-lived `/api/stream`, each UPnP poll, and each alert. An alert carries its
+`traceparent` in the snapshots, so a web pod's `relay alert` span joins the
+watch's trace (`overwatch/tracing.py`). Spans hold a feed and a kind, never an
+address or BSSID. The scan loops have no spans of their own: they tick every
+second, which would be 86,400 traces a day from each watch.
 
 ## Develop
 

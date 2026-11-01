@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 
 import brick_observe
 
+from . import tracing
+
 log = brick_observe.get_logger(__name__)
 
 
@@ -286,18 +288,20 @@ class Watch:
                 ):
                     newest = max(devs, key=lambda d: d[1].first)[1]
                     self.alert_counts[kind] += 1
-                    self.alerts.append(
-                        {
-                            "kind": kind,
-                            "label": KINDS[kind].label,
-                            "confidence": KINDS[kind].confidence,
-                            "at": now,
-                            "count": len(devs),
-                            "normal": self.normal.get(kind, 0),
-                            "rssi": newest.rssi,
-                        }
-                    )
-                    log.info("overwatch alert", kind=kind, nearby=len(devs), normal=self.normal.get(kind, 0))
+                    with brick_observe.span("overwatch alert", **{"overwatch.kind": kind, "overwatch.nearby": len(devs)}):
+                        self.alerts.append(
+                            {
+                                "kind": kind,
+                                "label": KINDS[kind].label,
+                                "confidence": KINDS[kind].confidence,
+                                "at": now,
+                                "count": len(devs),
+                                "normal": self.normal.get(kind, 0),
+                                "rssi": newest.rssi,
+                                **tracing.carried(),
+                            }
+                        )
+                        log.info("overwatch alert", kind=kind, nearby=len(devs), normal=self.normal.get(kind, 0))
             for kind in list(self.over_since):
                 if kind not in nearby:
                     del self.over_since[kind]

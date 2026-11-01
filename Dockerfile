@@ -16,7 +16,9 @@ ENV POETRY_INSTALLER_PARALLEL=false
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 WORKDIR /code
 COPY pyproject.toml poetry.lock /code/
-RUN python -m venv --without-pip /venv && poetry install --no-root --only main
+# Poetry leaves its clone of a git dependency in /venv/src. The package itself is
+# in site-packages, and the clone's .git/index changes every build, and so the digest.
+RUN python -m venv --without-pip /venv && poetry install --no-root --only main && rm -rf /venv/src
 
 FROM ${PYTHON}
 # iw and ip for the Wi-Fi watch: monitor mode and channel hops on the dongle.

@@ -9,7 +9,6 @@ reason.
 
 from __future__ import annotations
 
-import threading
 from collections import Counter
 
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -17,34 +16,12 @@ from prometheus_client.core import CollectorRegistry, CounterMetricFamily, Gauge
 
 __all__ = [
     "CONTENT_TYPE_LATEST",
-    "Requests",
     "ble_registry",
     "render",
     "upnp_registry",
     "web_registry",
     "wifi_registry",
 ]
-
-
-class Requests:
-    """HTTP requests served, by path and status code."""
-
-    PATHS = {"/", "/index.html", "/api/stream", "/api/state", "/health", "/ready", "/metrics"}
-
-    def __init__(self):
-        self._counts: Counter = Counter()
-        self._lock = threading.Lock()
-
-    def add(self, path: str, code: int) -> None:
-        with self._lock:
-            self._counts[(path if path in self.PATHS else "other", str(code))] += 1
-
-    def collect(self):
-        m = CounterMetricFamily("overwatch_http_requests", "HTTP requests served.", labels=["path", "code"])
-        with self._lock:
-            for (path, code), n in sorted(self._counts.items()):
-                m.add_metric([path, code], n)
-        yield m
 
 
 class _Ble:
@@ -187,20 +164,20 @@ def _registry(*collectors) -> CollectorRegistry:
     return r
 
 
-def ble_registry(watch, hub, requests: Requests) -> CollectorRegistry:
-    return _registry(_Ble(watch), _Hub(hub), requests)
+def ble_registry(watch, hub) -> CollectorRegistry:
+    return _registry(_Ble(watch), _Hub(hub))
 
 
-def wifi_registry(watch, hub, requests: Requests) -> CollectorRegistry:
-    return _registry(_Wifi(watch), _Hub(hub), requests)
+def wifi_registry(watch, hub) -> CollectorRegistry:
+    return _registry(_Wifi(watch), _Hub(hub))
 
 
-def upnp_registry(watch, hub, requests: Requests) -> CollectorRegistry:
-    return _registry(_Upnp(watch), _Hub(hub), requests)
+def upnp_registry(watch, hub) -> CollectorRegistry:
+    return _registry(_Upnp(watch), _Hub(hub))
 
 
-def web_registry(relay, hub, requests: Requests) -> CollectorRegistry:
-    return _registry(_Web(relay, hub), _Hub(hub), requests)
+def web_registry(relay, hub) -> CollectorRegistry:
+    return _registry(_Web(relay, hub), _Hub(hub))
 
 
 def render(registry: CollectorRegistry) -> bytes:
