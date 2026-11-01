@@ -245,6 +245,7 @@ KINDS = {
         Kind("deauth", "Deauth flood"),
         Kind("twin", "Evil twin"),
         Kind("karma", "Karma / Pineapple"),
+        Kind("harvester", "Deauth spray"),
     )
 }
 
@@ -263,6 +264,7 @@ class Threat:
     frames: int = 0
     broadcast: bool = False
     ssids: int = 0
+    networks: int = 0  # harvester: distinct BSSIDs deauthed in the window
 
 
 class WifiWatch:
@@ -276,6 +278,12 @@ class WifiWatch:
         deauth_seconds: float = 5,
         karma_ssids: int = 4,
         karma_seconds: float = 60,
+        # A handshake harvester (pwnagotchi, and the like) sprays deauths across
+        # every network in range to force reconnects. Each BSSID stays well under
+        # the single-target flood, but deauths touching many BSSIDs in a short
+        # window is a pattern a home never makes on its own.
+        spray_bssids: int = 4,
+        spray_seconds: float = 12,
         gone_seconds: float = 120,
         overlap_seconds: float = 60,
         near_dbm: int = -60,
@@ -283,6 +291,8 @@ class WifiWatch:
         self.home = home or []
         self.deauth_frames, self.deauth_seconds = deauth_frames, deauth_seconds
         self.karma_ssids, self.karma_seconds = karma_ssids, karma_seconds
+        self.spray_bssids, self.spray_seconds = spray_bssids, spray_seconds
+        self._sprayed: dict[str, float] = {}  # BSSID -> last fresh deauth, for the spray window
         self.gone_seconds = gone_seconds
         # A flood on a BSSID that isn't the house's, heard louder than this,
         # is close by: "near the house", not "a neighbour's".
@@ -381,6 +391,15 @@ class WifiWatch:
         """A flood starts at `deauth_frames` in `deauth_seconds` for one BSSID;
         after that every frame for it counts towards the same flood until it
         goes quiet for `gone_seconds`."""
+        self._sprayed[f.bssid] = now
+        for b in [b for b, seen in self._sprayed.items() if now - seen > self.spray_seconds]:
+            del self._sprayed[b]
+        if len(self._sprayed) >= self.spray_bssids:
+            self._threat(
+                "harvester", "spray", now, "high", "many networks",
+                f"deauths for {len(self._sprayed)} networks in {self.spray_seconds:g} s",
+                rssi=rssi, channel=channel, networks=len(self._sprayed),
+            )
         broadcast = f.receiver == BROADCAST
         t = self.threats.get(("deauth", self._key(f.bssid)))
         if t and now - t.last <= self.gone_seconds:
@@ -518,6 +537,7 @@ class WifiWatch:
                         "frames": t.frames,
                         "broadcast": t.broadcast,
                         "ssids": t.ssids,
+                        "networks": t.networks,
                     }
                     for t in sorted(self.threats.values(), key=lambda t: -t.last)
                 ],

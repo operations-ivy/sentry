@@ -131,7 +131,8 @@ def wifi(st: dict) -> dict:
     rows = []
     for t in threats:
         extra = (f" · {t['frames']} frames{', broadcast' if t.get('broadcast') else ''}" if t["kind"] == "deauth"
-                 else f" · {t['ssids']} networks" if t["kind"] == "karma" else "")
+                 else f" · {t['ssids']} networks" if t["kind"] == "karma"
+                 else f" · {t['networks']} networks" if t["kind"] == "harvester" else "")
         rows.append({
             "key": f"{t['kind']}-{t['n']}", "name": f"{t['label']} · AP {t['n']}",
             "sub": [f"{t['reason']}{extra} · ", {"for": t["first"]}, ", last ", {"ago": t["last"]}],
