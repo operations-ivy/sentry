@@ -49,6 +49,13 @@ class WifiPanelTests(unittest.TestCase):
         gone = panel.wifi({"scanning": False, "error": "no dongle", "threats": []})
         self.assertEqual((gone["status"]["state"], gone["empty"]), ("error", "no dongle."))
 
+    def test_a_known_pwnagotchi_is_greeted(self):
+        p = panel.wifi({"scanning": True, "error": "", "channel": 1, "home": ["home"], "aps": 3,
+                        "threats": [], "friends": [{"name": "Pwny", "face": "(◕‿◕)", "last": 5}]})
+        self.assertEqual(p["headline"]["word"], "ALL CLEAR")
+        self.assertIn("pwnagotchi Pwny is online!", p["headline"]["line"])
+        self.assertIn("(◕‿◕)", p["headline"]["line"])
+
     def test_a_house_network_that_moved_is_news(self):
         p = panel.wifi({"scanning": True, "error": "", "channel": 1, "home": ["home"], "aps": 3, "threats": [],
                         "moved": [("home", 116)]})

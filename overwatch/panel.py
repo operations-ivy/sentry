@@ -143,12 +143,14 @@ def wifi(st: dict) -> dict:
             "hot": True,
         })
     home = st.get("home", [])
+    greeting = " · ".join(f"{f['face']} pwnagotchi {f['name']} is online!" for f in st.get("friends", []))
+    clear_line = " · ".join(x for x in (greeting, moved_line(st)) if x)
     return {
         "id": "wifi", "title": "Wi-Fi", "icon": "wifi",
         "status": status(error, st.get("scanning", False), f"ch {st.get('channel') or '…'}"),
         "headline": ({"severity": 3, "word": "HEADS UP", "tone": "bad",
                       "line": " · ".join(f"{t['label']} (AP {t['n']}): {t['reason']}" for t in threats)}
-                     if threats else {"severity": 0, "word": "ALL CLEAR", "tone": "ok", "line": moved_line(st)}),
+                     if threats else {"severity": 0, "word": "ALL CLEAR", "tone": "ok", "line": clear_line}),
         "stats": [
             {"label": "Wi-Fi attacks", "value": str(len(threats)), "sub": "going on now", "tone": "bad" if threats else "dim"},
             {"label": "Access points", "value": str(st.get("aps", 0)), "sub": "heard lately", "tone": "dim"},

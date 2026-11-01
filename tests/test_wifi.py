@@ -140,6 +140,21 @@ class WatchTests(unittest.TestCase):
         # Only the last few BSSIDs are ever inside one 12 s window.
         self.assertEqual([t["kind"] for t in w.get(now=26)["threats"]], [])
 
+    def test_a_known_pwnagotchi_is_greeted_not_alarmed(self):
+        pwn = "02:00:00:00:00:77"
+        w = WifiWatch(HOME, known={pwn: {"name": "Pwny", "face": "(◕‿◕)"}})
+        w.heard(parse(beacon(pwn, "anything")), -40, 1, now=5)
+        st = w.get(now=6)
+        self.assertEqual(st["threats"], [])
+        self.assertEqual(st["friends"], [{"name": "Pwny", "face": "(◕‿◕)", "last": 5}])
+
+    def test_a_pwnagotchi_goes_offline_after_the_window(self):
+        pwn = "02:00:00:00:00:77"
+        w = WifiWatch(HOME, known={pwn: {"name": "Pwny", "face": "(◕‿◕)"}})
+        w.heard(parse(beacon(pwn, "anything")), -40, 1, now=0)
+        self.assertEqual(len(w.get(now=300)["friends"]), 1)
+        self.assertEqual(w.get(now=601)["friends"], [])
+
     def test_the_house_itself_is_no_threat(self):
         for t in range(30):
             self.hear(beacon(HOME_AP, "Castle"), t)
